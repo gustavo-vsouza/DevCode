@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevCode IDE - Interpretador</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&family=Inter:wght@300;400;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg-main: #0d1117;
+            --bg-sidebar: #161b22;
+            --bg-editor: #0d1117;
+            --border-color: #30363d;
+            --accent-blue: #58a6ff;
+            --accent-green: #238636;
+            --accent-red: #da3633;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-main);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484f58;
+        }
+
+        #editor-container {
+            position: relative;
+            font-family: 'Fira Code', monospace;
+            line-height: 1.6;
+        }
+
+        #editor,
+        #highlight-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 1.5rem;
+            border: none;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: inherit;
+            tab-size: 4;
+        }
+
+        #editor {
+            z-index: 2;
+            background: transparent;
+            color: transparent;
+            caret-color: #fff;
+            resize: none;
+            outline: none;
+        }
+
+        #highlight-layer {
+            z-index: 1;
+            background: var(--bg-editor);
+            color: #d1d5db;
+            pointer-events: none;
+        }
+
+        /* Cores do Highlight */
+        .hl-keyword {
+            color: #ff7b72;
+            font-weight: 600;
+        }
+
+        .hl-type {
+            color: #ffa657;
+        }
+
+        .hl-string {
+            color: #a5d6ff;
+        }
+
+        .hl-comment {
+            color: #8b949e;
+            font-style: italic;
+        }
+
+        .hl-number {
+            color: #79c0ff;
+        }
+
+        .hl-operator {
+            color: #ff7b72;
+        }
+
+        #console-container {
+            font-family: 'Fira Code', monospace;
+            background-color: #010409;
+        }
+
+        .material-symbols-rounded {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 18px;
+        }
+
+        input:focus {
+            outline: none;
+        }
+
+        .error-text {
+            color: #ff7b72;
+            font-weight: bold;
+        }
+
+        .user-text {
+            color: #58a6ff;
+            font-weight: 500;
+        }
+
+        .system-text {
+            color: #7ee787;
+        }
+
+        .btn-base {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <header
+        class="bg-[#161b22] border-b border-[#30363d] px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-500/10 p-2 rounded-lg">
+                <span class="material-symbols-rounded text-blue-400">terminal</span>
+            </div>
+            <div>
+                <h1 class="text-sm font-semibold text-white tracking-tight">DevCode IDE</h1>
+                <p class="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Interpretador de
+                    Pseudo-Código</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="clearConsole()"
+                class="btn-base px-3 py-1.5 bg-transparent hover:bg-white/5 text-gray-400 hover:text-white text-xs rounded-md border border-[#30363d]">
+                <span class="material-symbols-rounded text-sm">delete_sweep</span>
+                Limpar
+            </button>
+            <button onclick="stopExecution()" id="stop-btn"
+                class="btn-base px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 text-xs rounded-md border border-red-500/20 hidden">
+                <span class="material-symbols-rounded text-sm">stop</span>
+                Parar
+            </button>
+            <button onclick="runCode()" id="run-btn"
+                class="btn-base px-5 py-1.5 bg-[#238636] hover:bg-[#2ea043] text-white text-xs font-semibold rounded-md shadow-sm">
+                <span class="material-symbols-rounded text-sm">play_arrow</span>
+                Executar
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden">
+
+        <section class="flex-1 flex flex-col border-r border-[#30363d]">
+            <div
+                class="bg-[#161b22] text-gray-500 text-[11px] font-medium py-2 px-6 border-b border-[#30363d] flex items-center gap-2">
+                <span class="material-symbols-rounded text-sm">description</span>
+                main.por
+            </div>
+            <div id="editor-container" class="flex-1">
+                <pre id="highlight-layer" aria-hidden="true"></pre>
+                <textarea id="editor" spellcheck="false" placeholder="Escreva seu algoritmo aqui..."></textarea>
+            </div>
+        </section>
+
+        <section class="flex-1 flex flex-col">
+            <div
+                class="bg-[#161b22] text-gray-500 text-[11px] font-medium py-2 px-6 border-b border-[#30363d] flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-rounded text-sm">output</span>
+                    Terminal
+                </div>
+                <div class="flex items-center gap-2">
+                    <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></div>
+                    <span id="status-indicator"
+                        class="text-[10px] uppercase font-bold tracking-wider text-gray-500">Pronto</span>
+                </div>
+            </div>
+
+            <div id="console-container" class="flex-1 p-6 overflow-y-auto text-sm leading-relaxed">
+                <div id="output-area" class="whitespace-pre-wrap inline"></div>
+                <div id="input-wrapper" class="inline-flex items-center hidden">
+                    <input type="text" id="console-input"
+                        class="bg-transparent border-none outline-none text-[#58a6ff] font-mono p-0 min-w-[5px]"
+                        autocomplete="off">
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const highlightLayer = document.getElementById('highlight-layer');
+        const outputArea = document.getElementById('output-area');
+        const inputWrapper = document.getElementById('input-wrapper');
+        const consoleInput = document.getElementById('console-input');
+        const runBtn = document.getElementById('run-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusDot = document.getElementById('status-dot');
+        const consoleContainer = document.getElementById('console-container');
+
+        let isRunning = false;
+        let shouldStop = false;
+
+        function updateHighlight() {
+            let content = editor.value;
+            content = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+            // Expressão regular com as novas palavras chave (ENQUANTO, FACA, PARA, ATE, PASSO, etc)
+            const regex = /(\/\/.*)|(".*?")|\b(ALGORITMO|DECLARE|INICIO|FIM|ESCREVA|LEIA|SE|ENTAO|SENAO|FIMSE|ENQUANTO|FACA|FIMENQUANTO|PARA|DE|ATE|PASSO|FIMPARA)\b|\b(INTEIRO|REAL|CARACTERE)\b|(←|&lt;-)|\b(\d+(?:\.\d+)?)\b/g;
+
+            content = content.replace(regex, (match, comment, str, kw, type, op, num) => {
+                if (comment) return `<span class="hl-comment">${comment}</span>`;
+                if (str) return `<span class="hl-string">${str}</span>`;
+                if (kw) return `<span class="hl-keyword">${kw}</span>`;
+                if (type) return `<span class="hl-type">${type}</span>`;
+                if (op) return `<span class="hl-operator">${match}</span>`;
+                if (num) return `<span class="hl-number">${num}</span>`;
+                return match;
+            });
+
+            highlightLayer.innerHTML = content + (content.endsWith('\n') ? ' ' : '');
+        }
+
+        editor.addEventListener('input', updateHighlight);
+        editor.addEventListener('scroll', () => {
+            highlightLayer.scrollTop = editor.scrollTop;
+            highlightLayer.scrollLeft = editor.scrollLeft;
+        });
+
+        function clearConsole() {
+            outputArea.innerHTML = '';
+            inputWrapper.classList.add('hidden');
+        }
+
+        function setStatus(text, dotClass, textClass) {
+            statusIndicator.textContent = text;
+            statusIndicator.className = `text-[10px] uppercase font-bold tracking-wider ${textClass}`;
+            statusDot.className = `w-2 h-2 rounded-full ${dotClass}`;
+        }
+
+        function printToConsole(text, type = 'system') {
+            const processedText = text.replace(/\\n/g, '\n');
+            const span = document.createElement('span');
+
+            if (type === 'error') span.className = 'error-text';
+            else if (type === 'user') span.className = 'user-text';
+            else span.className = 'system-text';
+
+            span.textContent = processedText;
+            outputArea.appendChild(span);
+            consoleContainer.scrollTop = consoleContainer.scrollHeight;
+        }
+
+        function requestUserInput() {
+            return new Promise((resolve, reject) => {
+                inputWrapper.classList.remove('hidden');
+                consoleInput.value = '';
+                consoleInput.focus();
+
+                const updateWidth = () => {
+                    consoleInput.style.width = (Math.max(1, consoleInput.value.length) + 1) + "ch";
+                };
+                consoleInput.oninput = updateWidth;
+                updateWidth();
+
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Enter') {
+                        const val = consoleInput.value;
+                        inputWrapper.classList.add('hidden');
+                        printToConsole(val + '\n', 'user');
+                        consoleInput.removeEventListener('keydown', handleKeyDown);
+                        resolve(val);
+                    }
+                };
+
+                const checkStop = setInterval(() => {
+                    if (shouldStop) {
+                        clearInterval(checkStop);
+                        inputWrapper.classList.add('hidden');
+                        consoleInput.removeEventListener('keydown', handleKeyDown);
+                        reject(new Error("Execução interrompida pelo usuário."));
+                    }
+                }, 100);
+
+                consoleInput.addEventListener('keydown', handleKeyDown);
+            });
+        }
+
+        function stopExecution() {
+            if (isRunning) {
+                shouldStop = true;
+            }
+        }
+
+        function evaluateExpression(expr, variables) {
+            let jsExpr = expr.replace(/←|<-/g, '=');
+            jsExpr = jsExpr.replace(/(?<![=<>!])=(?![=<>!])/g, '===');
+            const keys = Object.keys(variables);
+            const values = keys.map(k => variables[k].value);
+            try {
+                const evaluator = new Function(...keys, `return ${jsExpr};`);
+                return evaluator(...values);
+            } catch (err) {
+                throw new Error(`Erro ao avaliar expressão: '${expr}'`);
+            }
+        }
+
+        function parseEscrevaArgs(str) {
+            let parts = [];
+            let inQuotes = false;
+            let current = '';
+            for (let i = 0; i < str.length; i++) {
+                let char = str[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                    if (!inQuotes) {
+                        parts.push({ isString: true, val: current });
+                        current = '';
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    if (current.trim() !== '') {
+                        parts.push({ isString: false, val: current.trim() });
+                        current = '';
+                    }
+                } else {
+                    if (inQuotes || char !== ' ' || current.length > 0) current += char;
+                }
+            }
+            if (current.trim() !== '') parts.push({ isString: false, val: current.trim() });
+            return parts;
+        }
+
+        function getCleanLine(rawLine) {
+            if (!rawLine) return "";
+            let cleanLine = "";
+            let inQuotes = false;
+            for (let c = 0; c < rawLine.length; c++) {
+                if (rawLine[c] === '"') inQuotes = !inQuotes;
+                // Se encontrar '//' fora de aspas, ignora o restante da linha e para de copiar
+                if (!inQuotes && rawLine[c] === '/' && rawLine[c + 1] === '/') {
+                    break;
+                }
+                cleanLine += rawLine[c];
+            }
+            return cleanLine.trim();
+        }
+
+        async function runCode() {
+            if (isRunning) return;
+
+            isRunning = true;
+            shouldStop = false;
+            runBtn.classList.add('opacity-50', 'pointer-events-none');
+            stopBtn.classList.remove('hidden');
+
+            clearConsole();
+            setStatus('Executando', 'bg-yellow-500 animate-pulse', 'text-yellow-500');
+
+            const code = editor.value;
+            const lines = code.split('\n');
+            let variables = {};
+            let mode = 'START';
+            let i = 0;
+            let loopStack = [];
+
+            try {
+                // PASSO 1: Verificação (Pre-Flight Check) - Garante que SEs e Laços estão fechados
+                let valStack = [];
+                for (let j = 0; j < lines.length; j++) {
+                    let l = getCleanLine(lines[j]);
+                    if (!l) continue;
+
+                    if (l.startsWith('SE ')) valStack.push({ type: 'SE', line: j + 1 });
+                    else if (l === 'SENAO') {
+                        if (valStack.length === 0 || valStack[valStack.length - 1].type !== 'SE')
+                            throw new Error(`Erro Sintaxe [Linha ${j + 1}]: 'SENAO' encontrado sem um 'SE' aberto.`);
+                    }
+                    else if (l === 'FIMSE') {
+                        if (valStack.length === 0 || valStack[valStack.length - 1].type !== 'SE')
+                            throw new Error(`Erro Sintaxe [Linha ${j + 1}]: 'FIMSE' encontrado sem um 'SE' correspondente.`);
+                        valStack.pop();
+                    }
+                    else if (l.startsWith('ENQUANTO ')) valStack.push({ type: 'ENQUANTO', line: j + 1 });
+                    else if (l === 'FIMENQUANTO') {
+                        if (valStack.length === 0 || valStack[valStack.length - 1].type !== 'ENQUANTO')
+                            throw new Error(`Erro Sintaxe [Linha ${j + 1}]: 'FIMENQUANTO' encontrado sem um 'ENQUANTO' correspondente.`);
+                        valStack.pop();
+                    }
+                    else if (l.startsWith('PARA ')) valStack.push({ type: 'PARA', line: j + 1 });
+                    else if (l === 'FIMPARA') {
+                        if (valStack.length === 0 || valStack[valStack.length - 1].type !== 'PARA')
+                            throw new Error(`Erro Sintaxe [Linha ${j + 1}]: 'FIMPARA' encontrado sem um 'PARA' correspondente.`);
+                        valStack.pop();
+                    }
+                }
+                if (valStack.length > 0) {
+                    let unclosed = valStack[valStack.length - 1];
+                    throw new Error(`Erro Sintaxe [Linha ${unclosed.line}]: Bloco '${unclosed.type}' não foi fechado com seu comando correspondente.`);
+                }
+
+                // PASSO 2: Execução
+                while (i < lines.length) {
+                    if (shouldStop) throw new Error("Execução interrompida pelo usuário.");
+
+                    let line = getCleanLine(lines[i]);
+                    if (!line) { i++; continue; }
+
+                    if (line.startsWith('ALGORITMO')) { i++; continue; }
+                    if (line === 'DECLARE') { mode = 'DECLARE'; i++; continue; }
+                    if (line === 'INICIO') { mode = 'INICIO'; i++; continue; }
+                    if (line === 'FIM') break;
+
+                    if (mode === 'DECLARE') {
+                        let parts = line.split(':');
+                        if (parts.length === 2) {
+                            let names = parts[0].split(',').map(n => n.trim());
+                            let type = parts[1].trim().toUpperCase();
+                            for (let name of names) {
+                                variables[name] = { type, value: type === 'CARACTERE' ? '' : 0 };
+                            }
+                        }
+                    }
+                    else if (mode === 'INICIO') {
+                        if (line.startsWith('ESCREVA ')) {
+                            let args = parseEscrevaArgs(line.substring(8).trim());
+                            let output = '';
+                            for (let p of args) {
+                                if (p.isString) output += p.val;
+                                else {
+                                    if (variables[p.val] !== undefined) output += variables[p.val].value;
+                                    else output += evaluateExpression(p.val, variables);
+                                }
+                            }
+                            printToConsole(output, 'system');
+                        }
+                        else if (line.startsWith('LEIA ')) {
+                            let varName = line.substring(5).trim();
+                            if (!variables[varName]) throw new Error(`Variável '${varName}' não declarada.`);
+
+                            let input = await requestUserInput();
+                            let type = variables[varName].type;
+
+                            if (type === 'INTEIRO') {
+                                if (isNaN(input) || input.includes('.') || input.includes(',')) {
+                                    throw new Error(`Tipo incompatível: Esperado INTEIRO para '${varName}', recebeu "${input}"`);
+                                }
+                                variables[varName].value = parseInt(input, 10);
+                            } else if (type === 'REAL') {
+                                let val = parseFloat(input.replace(',', '.'));
+                                if (isNaN(val)) throw new Error(`Tipo incompatível: Esperado REAL para '${varName}', recebeu "${input}"`);
+                                variables[varName].value = val;
+                            } else {
+                                variables[varName].value = input;
+                            }
+                        }
+                        else if (line.includes('←') || line.includes('<-')) {
+                            let sep = line.includes('←') ? '←' : '<-';
+                            let [target, expr] = line.split(sep).map(s => s.trim());
+                            if (!variables[target]) throw new Error(`Variável '${target}' não declarada.`);
+                            variables[target].value = evaluateExpression(expr, variables);
+                        }
+                        else if (line.startsWith('SE ')) {
+                            let match = line.match(/SE\s+(.+)\s+ENTAO/);
+                            if (!match) throw new Error("Sintaxe inválida no comando SE.");
+                            let cond = match[1];
+                            if (!evaluateExpression(cond, variables)) {
+                                let depth = 0;
+                                while (i < lines.length) {
+                                    i++;
+                                    if (i >= lines.length) break;
+                                    let l = getCleanLine(lines[i]);
+                                    if (l.startsWith('SE ')) depth++;
+                                    if (l === 'FIMSE' && depth === 0) break;
+                                    if (l === 'SENAO' && depth === 0) break;
+                                    if (l === 'FIMSE') depth--;
+                                }
+                            }
+                        }
+                        else if (line === 'SENAO') {
+                            let depth = 0;
+                            while (i < lines.length) {
+                                i++;
+                                if (i >= lines.length) break;
+                                let l = getCleanLine(lines[i]);
+                                if (l.startsWith('SE ')) depth++;
+                                if (l === 'FIMSE' && depth === 0) break;
+                                if (l === 'FIMSE') depth--;
+                            }
+                        }
+                        else if (line.startsWith('ENQUANTO ')) {
+                            let match = line.match(/ENQUANTO\s+(.+)\s+FACA/);
+                            if (!match) throw new Error("Sintaxe inválida no comando ENQUANTO.");
+                            let cond = match[1];
+
+                            if (!evaluateExpression(cond, variables)) {
+                                let depth = 0;
+                                while (i < lines.length) {
+                                    i++;
+                                    if (i >= lines.length) break;
+                                    let l = getCleanLine(lines[i]);
+                                    if (l.startsWith('ENQUANTO ')) depth++;
+                                    if (l === 'FIMENQUANTO' && depth === 0) break;
+                                    if (l === 'FIMENQUANTO') depth--;
+                                }
+                            } else {
+                                if (loopStack.length === 0 || loopStack[loopStack.length - 1].line !== i) {
+                                    loopStack.push({ type: 'ENQUANTO', line: i });
+                                }
+                            }
+                        }
+                        else if (line === 'FIMENQUANTO') {
+                            if (loopStack.length > 0 && loopStack[loopStack.length - 1].type === 'ENQUANTO') {
+                                i = loopStack[loopStack.length - 1].line - 1;
+                                loopStack.pop();
+                            }
+                        }
+                        else if (line.startsWith('PARA ')) {
+                            let match = line.match(/PARA\s+([a-zA-Z_]\w*)\s+DE\s+(.+)\s+ATE\s+(.+?)(?:\s+PASSO\s+(.+))?\s+FACA/);
+                            if (!match) throw new Error("Sintaxe inválida no comando PARA.");
+
+                            let varName = match[1];
+                            let inicioExpr = match[2];
+                            let fimExpr = match[3];
+                            let passoExpr = match[4] || "1";
+
+                            if (!variables[varName]) throw new Error(`Variável de controle '${varName}' não declarada para o laço.`);
+
+                            let isTop = loopStack.length > 0 && loopStack[loopStack.length - 1].line === i;
+
+                            if (!isTop) {
+                                let inicioVal = evaluateExpression(inicioExpr, variables);
+                                let passoVal = evaluateExpression(passoExpr, variables);
+                                let fimVal = evaluateExpression(fimExpr, variables);
+
+                                variables[varName].value = inicioVal;
+                                loopStack.push({ type: 'PARA', line: i, varName, passo: passoVal, fim: fimVal });
+                            }
+
+                            let currentLoop = loopStack[loopStack.length - 1];
+                            let varVal = variables[currentLoop.varName].value;
+
+                            let cond = currentLoop.passo >= 0 ? (varVal <= currentLoop.fim) : (varVal >= currentLoop.fim);
+
+                            if (!cond) {
+                                loopStack.pop();
+                                let depth = 0;
+                                while (i < lines.length) {
+                                    i++;
+                                    if (i >= lines.length) break;
+                                    let l = getCleanLine(lines[i]);
+                                    if (l.startsWith('PARA ')) depth++;
+                                    if (l === 'FIMPARA' && depth === 0) break;
+                                    if (l === 'FIMPARA') depth--;
+                                }
+                            }
+                        }
+                        else if (line === 'FIMPARA') {
+                            if (loopStack.length > 0 && loopStack[loopStack.length - 1].type === 'PARA') {
+                                let currentLoop = loopStack[loopStack.length - 1];
+                                variables[currentLoop.varName].value += currentLoop.passo;
+                                i = currentLoop.line - 1;
+                            }
+                        }
+                    }
+                    i++;
+                }
+                printToConsole("\n\n[Programa finalizado]", 'system');
+                setStatus('Pronto', 'bg-green-500', 'text-green-500');
+            } catch (e) {
+                printToConsole(`\n\n[ERRO]: ${e.message}`, 'error');
+                setStatus('Erro', 'bg-red-500', 'text-red-500');
+            } finally {
+                isRunning = false;
+                runBtn.classList.remove('opacity-50', 'pointer-events-none');
+                stopBtn.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+
+</html>
