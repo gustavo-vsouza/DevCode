@@ -32,24 +32,38 @@
     }
 
     UIController.prototype.print = function (text, tone) {
+        if (!this.outputArea) {
+            return;
+        }
         const chunk = document.createElement('span');
         chunk.className = 'console-chunk tone-' + (tone || 'system');
         chunk.textContent = String(text);
         this.outputArea.appendChild(chunk);
-        this.consoleContainer.scrollTop = this.consoleContainer.scrollHeight;
+        if (this.consoleContainer) {
+            this.consoleContainer.scrollTop = this.consoleContainer.scrollHeight;
+        }
     };
 
     UIController.prototype.clearConsole = function () {
-        this.outputArea.innerHTML = '';
+        if (this.outputArea) {
+            this.outputArea.innerHTML = '';
+        }
         this.dismissInput();
     };
 
     UIController.prototype.setStatus = function (state, text) {
-        this.statusBadge.dataset.state = state;
-        this.statusText.textContent = text;
+        if (this.statusBadge) {
+            this.statusBadge.dataset.state = state;
+        }
+        if (this.statusText) {
+            this.statusText.textContent = text;
+        }
     };
 
     UIController.prototype.renderAnalysis = function (compilation) {
+        if (!this.analysisSummary || !this.analysisMeta) {
+            return;
+        }
         const declarationCount = compilation.ast.declarations.length;
         const statementCount = compilation.ast.body.length;
         const tokenCount = compilation.tokens.filter(function (token) {
@@ -66,6 +80,9 @@
     };
 
     UIController.prototype.renderAnalysisFailure = function (formattedError) {
+        if (!this.analysisSummary || !this.analysisMeta) {
+            return;
+        }
         this.analysisSummary.textContent = 'Analise interrompida por erro ' + formattedError.kind + '.';
         if (formattedError.line) {
             this.analysisMeta.textContent = 'Falha na linha ' + formattedError.line + ', coluna ' + (formattedError.column || 1) + '.';
@@ -75,6 +92,9 @@
     };
 
     UIController.prototype.renderError = function (formattedError) {
+        if (!this.errorSummary || !this.errorDetails || !this.errorSource) {
+            return;
+        }
         if (!formattedError) {
             this.errorSummary.textContent = 'Nenhum erro na ultima analise.';
             this.errorDetails.textContent = 'Tudo pronto para validar ou executar.';
@@ -92,6 +112,9 @@
     };
 
     UIController.prototype.renderVariables = function (snapshot) {
+        if (!this.variablesView) {
+            return;
+        }
         const names = Object.keys(snapshot || {});
         if (names.length === 0) {
             this.variablesView.textContent = 'Nenhuma variavel disponivel.';
@@ -109,6 +132,9 @@
     };
 
     UIController.prototype.renderSpec = function (spec) {
+        if (!this.specSections || !this.specGrammar || !this.specLimits) {
+            return;
+        }
         renderList(this.specSections, spec.sections);
         renderList(this.specGrammar, spec.grammar);
         renderList(this.specLimits, spec.mvpLimits);
@@ -117,16 +143,26 @@
     UIController.prototype.requestInput = function (meta, stopSignal) {
         const self = this;
         this.dismissInput();
+        if (!this.inputPanel || !this.inputField) {
+            return Promise.reject(errors.createError('execucao', 'Interface de entrada nao esta disponivel.', meta.location));
+        }
         this.inputPanel.hidden = false;
-        this.inputLabel.textContent = 'LEIA ' + meta.name + ' : ' + meta.type;
+        if (this.inputLabel) {
+            this.inputLabel.textContent = 'LEIA ' + meta.name + ' : ' + meta.type;
+        }
         this.inputField.value = '';
+        this.inputField.placeholder = meta.name + ' (' + meta.type + ')';
+        this.inputField.style.width = '10ch';
         this.inputField.focus();
 
         return new Promise(function (resolve, reject) {
             let intervalId = null;
+            let onInput = null;
+            let onKeyDown = null;
 
             function cleanup() {
                 self.inputField.removeEventListener('keydown', onKeyDown);
+                self.inputField.removeEventListener('input', onInput);
                 self.inputPanel.hidden = true;
                 if (intervalId) {
                     clearInterval(intervalId);
@@ -134,14 +170,22 @@
                 self.pendingInput = null;
             }
 
-            function onKeyDown(event) {
+            function resize() {
+                self.inputField.style.width = Math.max(10, self.inputField.value.length + 1) + 'ch';
+            }
+
+            onKeyDown = function (event) {
                 if (event.key === 'Enter') {
                     const value = self.inputField.value;
                     cleanup();
                     self.print('> ' + value + '\n', 'user');
                     resolve(value);
                 }
-            }
+            };
+
+            onInput = function () {
+                resize();
+            };
 
             intervalId = setInterval(function () {
                 if (stopSignal && stopSignal.requested) {
@@ -156,6 +200,8 @@
             };
 
             self.inputField.addEventListener('keydown', onKeyDown);
+            self.inputField.addEventListener('input', onInput);
+            resize();
         });
     };
 

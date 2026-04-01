@@ -49,10 +49,9 @@
         const saveFileButton = document.getElementById('save-file-btn');
         const loadFileButton = document.getElementById('load-file-btn');
         const fileInput = document.getElementById('file-input');
-        const exampleSelect = document.getElementById('example-select');
+        const fileNameLabel = document.getElementById('file-name-label');
         const searchInput = document.getElementById('search-input');
         const searchButton = document.getElementById('search-btn');
-        const snippetHost = document.getElementById('snippet-bar');
         const helpToggle = document.getElementById('help-toggle');
         const helpModal = document.getElementById('reference-modal');
         const helpClose = document.getElementById('reference-close-btn');
@@ -65,11 +64,11 @@
             pendingStepResolver: null
         };
 
-        ui.renderSpec(language.LANGUAGE_SPEC);
-        renderExamples(exampleSelect, language.SAMPLE_PROGRAMS);
-        renderSnippets(snippetHost, language.SNIPPETS, editor);
         renderReferenceGuide(referenceList, language.REFERENCE_GUIDE);
-        editor.setValue(language.SAMPLE_PROGRAMS[0].source);
+        editor.setValue('');
+        if (fileNameLabel) {
+            fileNameLabel.textContent = 'main.txt';
+        }
         ui.renderError(null);
         ui.renderVariables({});
         ui.setStatus('idle', 'Pronto');
@@ -120,7 +119,10 @@
             const blob = new Blob([editor.getValue()], { type: 'text/plain;charset=utf-8' });
             const anchor = document.createElement('a');
             anchor.href = URL.createObjectURL(blob);
-            anchor.download = 'main.por';
+            anchor.download = 'main.txt';
+            if (fileNameLabel) {
+                fileNameLabel.textContent = 'main.txt';
+            }
             anchor.click();
             setTimeout(function () {
                 URL.revokeObjectURL(anchor.href);
@@ -140,20 +142,12 @@
             reader.onload = function () {
                 editor.setValue(String(reader.result || ''));
                 validateSilently();
+                if (fileNameLabel) {
+                    fileNameLabel.textContent = file.name;
+                }
             };
             reader.readAsText(file);
             fileInput.value = '';
-        });
-
-        exampleSelect.addEventListener('change', function () {
-            const selected = language.SAMPLE_PROGRAMS.find(function (item) {
-                return item.id === exampleSelect.value;
-            });
-            if (selected) {
-                editor.setValue(selected.source);
-                ui.clearConsole();
-                validateSilently();
-            }
         });
 
         searchButton.addEventListener('click', function () {
@@ -222,8 +216,8 @@
                     maxSteps: 25000,
                     stopSignal: state.stopSignal,
                     write: function (chunk) {
-                        if (chunk && chunk !== '\n') {
-                            ui.print(chunk.replace(/\n$/, ''), 'system');
+                        if (chunk) {
+                            ui.print(chunk, 'system');
                         }
                     },
                     read: function (meta) {
@@ -321,6 +315,7 @@
             validateButton.disabled = state.running;
             formatButton.disabled = state.running;
             stopButton.disabled = !state.running;
+            stopButton.hidden = !state.running;
             stepButton.textContent = state.running && state.stepMode ? 'Proximo passo' : 'Passo a passo';
         }
 
@@ -337,41 +332,78 @@
         }
     }
 
-    function renderExamples(select, examples) {
-        select.innerHTML = '';
-        for (let i = 0; i < examples.length; i += 1) {
-            const option = document.createElement('option');
-            option.value = examples[i].id;
-            option.textContent = examples[i].title + ' - ' + examples[i].description;
-            select.appendChild(option);
-        }
-    }
-
-    function renderSnippets(host, snippets, editor) {
-        host.innerHTML = '';
-        for (let i = 0; i < snippets.length; i += 1) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'snippet-chip';
-            button.textContent = snippets[i].label;
-            button.addEventListener('click', function () {
-                editor.insertSnippet(snippets[i].content);
-            });
-            host.appendChild(button);
-        }
-    }
-
     function renderReferenceGuide(host, entries) {
         host.innerHTML = '';
         for (let i = 0; i < entries.length; i += 1) {
             const article = document.createElement('article');
-            article.className = 'reference-entry';
-            article.innerHTML = [
-                '<h3>' + escapeHtml(entries[i].title) + '</h3>',
-                '<p><strong>Sintaxe:</strong> ' + escapeHtml(entries[i].syntax) + '</p>',
-                '<p><strong>Exemplo:</strong></p>',
-                '<pre>' + escapeHtml(entries[i].example) + '</pre>'
+            article.className = 'docs-section';
+            const header = document.createElement('div');
+            header.className = 'docs-section-head';
+            const title = document.createElement('h3');
+            title.textContent = entries[i].title;
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'docs-python-toggle';
+            toggle.title = 'Ver este exemplo em Python';
+            toggle.textContent = 'i';
+            header.appendChild(title);
+            header.appendChild(toggle);
+
+            const summary = document.createElement('p');
+            summary.textContent = entries[i].summary || '';
+
+            const syntax = document.createElement('div');
+            syntax.className = 'docs-chip';
+            syntax.innerHTML = '<strong>Sintaxe:</strong> ' + escapeHtml(entries[i].syntax);
+
+            const fragment = document.createDocumentFragment();
+            fragment.appendChild(header);
+            fragment.appendChild(summary);
+            fragment.appendChild(syntax);
+
+            if (Array.isArray(entries[i].details) && entries[i].details.length) {
+                const details = document.createElement('ul');
+                for (let j = 0; j < entries[i].details.length; j += 1) {
+                    const item = document.createElement('li');
+                    item.textContent = entries[i].details[j];
+                    details.appendChild(item);
+                }
+                fragment.appendChild(details);
+            }
+
+            if (entries[i].tip) {
+                const tip = document.createElement('div');
+                tip.className = 'docs-tip';
+                tip.innerHTML = '<strong>Dica:</strong> ' + escapeHtml(entries[i].tip);
+                fragment.appendChild(tip);
+            }
+
+            const exampleLabel = document.createElement('div');
+            exampleLabel.className = 'docs-example-label';
+            exampleLabel.textContent = 'Exemplo em Portugol';
+
+            const exampleBlock = document.createElement('pre');
+            exampleBlock.className = 'docs-code docs-code-portugol';
+            exampleBlock.innerHTML = '<code>' + highlightReferenceCode(entries[i].example, 'portugol') + '</code>';
+
+            const pythonWrap = document.createElement('div');
+            pythonWrap.className = 'docs-python-example';
+            pythonWrap.hidden = true;
+            pythonWrap.innerHTML = [
+                '<div class="docs-example-label">O mesmo exemplo em Python</div>',
+                '<pre class="docs-code docs-code-python"><code>' + highlightReferenceCode(entries[i].pythonExample || '# Exemplo em Python indisponivel.', 'python') + '</code></pre>'
             ].join('');
+
+            toggle.addEventListener('click', function () {
+                const isHidden = pythonWrap.hidden;
+                pythonWrap.hidden = !isHidden;
+                toggle.classList.toggle('is-open', isHidden);
+            });
+
+            article.appendChild(fragment);
+            article.appendChild(exampleLabel);
+            article.appendChild(exampleBlock);
+            article.appendChild(pythonWrap);
             host.appendChild(article);
         }
     }
@@ -381,6 +413,36 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    function highlightReferenceCode(source, language) {
+        const escaped = escapeHtml(String(source || ''));
+        if (language === 'python') {
+            return escaped.replace(
+                /(#[^\n]*$)|("([^"\\]|\\.)*"|'([^'\\]|\\.)*')|\b(def|for|while|if|elif|else|in|range|print|input|True|False|and|or|not)\b|\b(\d+(?:\.\d+)?)\b|(\+|-|\*|\/|==|!=|<=|>=|<|>|=)/gim,
+                function (match, comment, str, _a, _b, keyword, number, operator) {
+                    if (comment) return '<span class="docs-comment">' + comment + '</span>';
+                    if (str) return '<span class="docs-string">' + str + '</span>';
+                    if (keyword) return '<span class="docs-keyword">' + keyword + '</span>';
+                    if (number) return '<span class="docs-number">' + number + '</span>';
+                    if (operator) return '<span class="docs-operator">' + operator + '</span>';
+                    return match;
+                }
+            );
+        }
+
+        return escaped.replace(
+            /(\/\/.*$)|("([^"\\]|\\.)*")|\b(ALGORITMO|DECLARE|INICIO|FIM|ESCREVA|ESCREVAL|LEIA|SE|ENTAO|SENAO|FIMSE|ENQUANTO|FACA|FIMENQUANTO|PARA|DE|ATE|PASSO|FIMPARA|ESCOLHA|CASO|OUTROCASO|FIMESCOLHA)\b|\b(INTEIRO|REAL|CARACTERE|LOGICO|VETOR|VERDADEIRO|FALSO)\b|(<-|!=|<=|>=|=|\+|-|\*|\/|\bE\b|\bOU\b|\bNAO\b|<|>)|\b(\d+(?:\.\d+)?)\b/gim,
+            function (match, comment, str, _a, keyword, typeName, operator, number) {
+                if (comment) return '<span class="docs-comment">' + comment + '</span>';
+                if (str) return '<span class="docs-string">' + str + '</span>';
+                if (keyword) return '<span class="docs-keyword">' + keyword + '</span>';
+                if (typeName) return '<span class="docs-type">' + typeName + '</span>';
+                if (operator) return '<span class="docs-operator">' + operator + '</span>';
+                if (number) return '<span class="docs-number">' + number + '</span>';
+                return match;
+            }
+        );
     }
 
     if (document.readyState === 'loading') {
